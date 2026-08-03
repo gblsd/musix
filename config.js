@@ -8,5 +8,5 @@ const SITE_OWNER = "Galo";
 
 // Datos de tu proyecto de Supabase (ver README.md, paso 2)
 // Los encontrás en Supabase → Project Settings → API
-const SUPABASE_URL = "PEGA_AQUI_TU_SUPABASE_URL";
-const SUPABASE_ANON_KEY = "PEGA_AQUI_TU_SUPABASE_ANON_KEY";
+const SUPABASE_URL = "https://cawgwcrsetyunofaytnk.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_kQLc1xJrgNHT6aBoWj_skQ_pxuzOmRu";
