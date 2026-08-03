@@ -8,36 +8,25 @@
 </head>
 <body>
 
-<!-- filtro SVG para el efecto de tinta rugosa del sello -->
-<svg width="0" height="0" style="position:absolute">
-  <filter id="inkRough">
-    <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" result="noise" seed="7"/>
-    <feDisplacementMap in="SourceGraphic" in2="noise" scale="2.4"/>
-  </filter>
-</svg>
-
 <header class="site">
   <div class="site-inner">
-    <h1 class="wordmark" id="wordmark">Bitácora Sonora<small id="wordmark-sub">DIARIO DE ESCUCHA</small></h1>
-    <nav class="site-nav">
-      <button data-view="shelf" class="active">Estante</button>
-      <button data-view="search">Añadir</button>
-    </nav>
+    <h1 class="wordmark" id="wordmark">Bitácora Sonora</h1>
   </div>
 </header>
 
 <main>
 
-  <!-- ESTANTE: grilla de todo lo calificado -->
+  <!-- ESTANTE -->
   <section class="view active" id="view-shelf">
     <h2 class="view-title">Estante <span class="count" id="shelf-count"></span></h2>
+    <div class="chip-row" id="genre-chips"></div>
     <div class="shelf-grid" id="shelf-grid"></div>
     <div class="empty-state" id="shelf-empty" style="display:none">
-      El estante está vacío todavía.<br>Usá "Añadir" para buscar tu primer álbum.
+      El estante está vacío todavía.<br>Tocá "+" abajo para buscar tu primer álbum.
     </div>
   </section>
 
-  <!-- BUSCAR: catálogo de iTunes -->
+  <!-- BUSCAR -->
   <section class="view" id="view-search">
     <h2 class="view-title">Buscar álbum</h2>
     <div class="search-bar">
@@ -45,21 +34,45 @@
       <button id="search-btn">Buscar</button>
     </div>
     <div class="results-list" id="results-list"></div>
-
-    <!-- panel de calificación, se llena al elegir un resultado -->
     <div class="rating-panel" id="rating-panel" style="display:none"></div>
   </section>
 
-  <!-- DETALLE de una entrada guardada -->
+  <!-- DETALLE -->
   <section class="view" id="view-entry">
     <div class="entry-detail" id="entry-detail"></div>
   </section>
 
+  <!-- PERFIL -->
+  <section class="view" id="view-profile">
+    <div class="profile-header">
+      <div class="avatar" id="profile-avatar">?</div>
+      <h2 id="profile-name"></h2>
+      <div class="stat-row">
+        <div class="stat"><div class="n" id="stat-count">0</div><div class="l">discos</div></div>
+        <div class="stat"><div class="n" id="stat-avg">–</div><div class="l">promedio</div></div>
+        <div class="stat"><div class="n" id="stat-genre">–</div><div class="l">género top</div></div>
+      </div>
+    </div>
+    <button class="btn-primary" id="login-fab-2">Entrar como editor</button>
+  </section>
+
 </main>
 
-<button class="login-fab" id="login-fab">Editor</button>
+<!-- nav flotante inferior -->
+<nav class="tab-bar">
+  <button data-view="shelf" class="active" aria-label="Estante">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5 12 3l9 6.5"/><path d="M5 9.5V21h14V9.5"/></svg>
+  </button>
+  <button data-view="search" aria-label="Añadir">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+  </button>
+  <button data-view="profile" aria-label="Perfil">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg>
+  </button>
+</nav>
 
-<div class="modal-backdrop" id="login-modal">
+<!-- modal de login -->
+<div class="modal-backdrop" id="login-modal" style="align-items:center">
   <div class="modal-box">
     <h3 id="login-title">Acceso de editor</h3>
     <input type="email" id="login-email" placeholder="correo">
@@ -67,6 +80,23 @@
     <div class="modal-msg" id="login-msg"></div>
     <button class="btn-primary" id="login-submit">Entrar</button>
     <button class="btn-secondary" id="login-cancel">Cerrar</button>
+  </div>
+</div>
+
+<!-- modal de comparación -->
+<div class="modal-backdrop" id="compare-modal">
+  <div class="compare-sheet">
+    <div class="compare-head">
+      <h3>Comparar</h3>
+      <button class="close" id="compare-close">✕</button>
+    </div>
+    <p class="compare-sub" id="compare-sub">¿Cuál te gustó más?</p>
+    <div class="compare-cards" id="compare-cards"></div>
+    <div class="compare-actions">
+      <button id="compare-tie">Empate</button>
+      <button id="compare-undo">Deshacer</button>
+    </div>
+    <div class="compare-progress" id="compare-progress"></div>
   </div>
 </div>
 
