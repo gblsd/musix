@@ -79,11 +79,14 @@ document.getElementById('search-input').addEventListener('keydown', e => {
   if (e.key === 'Enter') runSearch();
 });
 
-// palabras que delatan discos "tributo"/karaoke que no son el álbum real
+// palabras/etiquetas que delatan discos "tributo"/karaoke que no son el álbum real
 const JUNK_PATTERNS = [
   'karaoke', 'tribute', 'made famous', 'originally performed',
   'in the style of', 'as made famous', 'cover version', 'this is a tribute',
-  'a tribute to', 'performed by'
+  'a tribute to', 'performed by', 'sound-alike', 'soundalike', 'instrumental version',
+  'backing track', 'studio band', 'party tyme', 'ameritz', 'vox freaks',
+  'sing karaoke', 'starlite karaoke', 'karaoke universe', 'missing link karaoke',
+  'the karaoke channel', 'high score karaoke'
 ];
 
 function isJunkResult(it) {
@@ -91,18 +94,53 @@ function isJunkResult(it) {
   return JUNK_PATTERNS.some(p => text.includes(p));
 }
 
-function scoreResult(it, queryWords) {
-  const title = (it.collectionName || '').toLowerCase();
-  const artist = (it.artistName || '').toLowerCase();
+function normalize(str) {
+  return (str || '')
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // saca acentos
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function scoreResult(it, queryNorm, queryWords) {
+  const title = normalize(it.collectionName);
+  const artist = normalize(it.artistName);
+  const combined = `${title} ${artist}`;
   let score = 0;
+
+  // coincidencia de frase completa: la señal más fuerte
+  if (queryNorm && combined.includes(queryNorm)) score += 60;
+  if (queryNorm && title === queryNorm) score += 40;
+
   queryWords.forEach(w => {
-    if (title.includes(w)) score += 2;
-    if (artist.includes(w)) score += 3; // coincidir el artista pesa más
+    if (w.length < 2) return;
+    if (title.includes(w)) score += 3;
+    if (artist.includes(w)) score += 5; // que coincida el artista pesa más
   });
-  // discos con más canciones suelen ser el álbum de estudio real,
-  // no un single o EP suelto con el mismo nombre
-  score += Math.min(it.trackCount || 0, 20) * 0.1;
+
+  // qué proporción de las palabras del artista real están en la búsqueda
+  const artistWords = artist.split(' ').filter(Boolean);
+  if (artistWords.length) {
+    const hits = artistWords.filter(w => queryWords.includes(w)).length;
+    score += (hits / artistWords.length) * 15;
+  }
+
+  // discos con más pistas suelen ser el álbum de estudio real
+  score += Math.min(it.trackCount || 0, 20) * 0.15;
+
+  // penaliza nombres de "sello" genéricos típicos de karaoke/covers
+  if (/players|all[- ]?stars|studio (band|singers|musicians)/.test(artist)) score -= 25;
+
   return score;
+}
+
+async function fetchAlbums(term, attribute) {
+  const attr = attribute ? `&attribute=${attribute}` : '';
+  const url = `https://itunes.apple.com/search?term=${encodeURIComponent(term)}&entity=album&country=US&limit=50${attr}`;
+  const res = await fetch(url);
+  const json = await res.json();
+  return json.results || [];
 }
 
 async function runSearch() {
@@ -111,13 +149,24 @@ async function runSearch() {
   const list = document.getElementById('results-list');
   list.innerHTML = `<div class="empty-state">Buscando…</div>`;
   try {
-    const res = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(term)}&entity=album&limit=25`);
-    const json = await res.json();
-    const queryWords = term.toLowerCase().split(/\s+/).filter(Boolean);
+    // dos pasadas: búsqueda general + búsqueda enfocada en el título del álbum,
+    // así el disco real aparece aunque el término mezcle artista y álbum
+    const [broad, byTitle] = await Promise.all([
+      fetchAlbums(term, null),
+      fetchAlbums(term, 'albumTerm')
+    ]);
 
-    const results = (json.results || [])
+    const merged = new Map();
+    [...broad, ...byTitle].forEach(it => {
+      if (it.collectionId) merged.set(it.collectionId, it);
+    });
+
+    const queryNorm = normalize(term);
+    const queryWords = queryNorm.split(' ').filter(Boolean);
+
+    const results = Array.from(merged.values())
       .filter(it => !isJunkResult(it))
-      .sort((a, b) => scoreResult(b, queryWords) - scoreResult(a, queryWords))
+      .sort((a, b) => scoreResult(b, queryNorm, queryWords) - scoreResult(a, queryNorm, queryWords))
       .slice(0, 12);
 
     renderResults(results);
