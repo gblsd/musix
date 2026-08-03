@@ -89,9 +89,9 @@ const JUNK_PATTERNS = [
   'the karaoke channel', 'high score karaoke'
 ];
 
-function isJunkResult(it) {
-  const text = `${it.collectionName || ''} ${it.artistName || ''}`.toLowerCase();
-  return JUNK_PATTERNS.some(p => text.includes(p));
+function isJunkText(text) {
+  const t = (text || '').toLowerCase();
+  return JUNK_PATTERNS.some(p => t.includes(p));
 }
 
 function normalize(str) {
@@ -103,44 +103,78 @@ function normalize(str) {
     .trim();
 }
 
-function scoreResult(it, queryNorm, queryWords) {
+async function fetchJSON(url) {
+  const res = await fetch(url);
+  return res.json();
+}
+
+// ---- Paso 1: encontrar el/los artistas REALES a los que se refiere la búsqueda ----
+async function findArtistCandidates(term) {
+  const [byTerm, general] = await Promise.all([
+    fetchJSON(`https://itunes.apple.com/search?term=${encodeURIComponent(term)}&entity=musicArtist&attribute=artistTerm&country=US&limit=10`),
+    fetchJSON(`https://itunes.apple.com/search?term=${encodeURIComponent(term)}&entity=musicArtist&country=US&limit=10`)
+  ]);
+
+  const merged = new Map();
+  [...(byTerm.results || []), ...(general.results || [])].forEach(a => {
+    if (a.artistId) merged.set(a.artistId, a);
+  });
+
+  const queryNorm = normalize(term);
+  const queryWords = queryNorm.split(' ').filter(Boolean);
+
+  const scored = Array.from(merged.values())
+    .filter(a => a.primaryGenreName !== 'Karaoke') // Apple etiqueta así a los sellos de karaoke
+    .filter(a => !isJunkText(a.artistName))
+    .map(a => {
+      const name = normalize(a.artistName);
+      let score = 0;
+      if (name === queryNorm) score += 50;
+      if (queryNorm.includes(name) || name.includes(queryNorm)) score += 25;
+      const nameWords = name.split(' ').filter(Boolean);
+      const hits = nameWords.filter(w => queryWords.includes(w)).length;
+      if (nameWords.length) score += (hits / nameWords.length) * 30;
+      return { artist: a, score };
+    })
+    .filter(x => x.score >= 15) // umbral: evita "adivinar" un artista sin relación real
+    .sort((a, b) => b.score - a.score);
+
+  return scored.slice(0, 3).map(x => x.artist);
+}
+
+// ---- Paso 2: traer la discografía oficial real de ese artistId ----
+async function albumsForArtist(artistId) {
+  const json = await fetchJSON(`https://itunes.apple.com/lookup?id=${artistId}&entity=album&limit=200&country=US`);
+  return (json.results || []).filter(r => r.wrapperType === 'collection' && r.collectionType === 'Album');
+}
+
+// ---- Plan B: búsqueda de texto libre con filtros, solo si no se identificó un artista real ----
+async function fallbackTextSearch(term) {
+  const [broad, byTitle] = await Promise.all([
+    fetchJSON(`https://itunes.apple.com/search?term=${encodeURIComponent(term)}&entity=album&country=US&limit=50`),
+    fetchJSON(`https://itunes.apple.com/search?term=${encodeURIComponent(term)}&entity=album&country=US&limit=50&attribute=albumTerm`)
+  ]);
+  const merged = new Map();
+  [...(broad.results || []), ...(byTitle.results || [])].forEach(it => {
+    if (it.collectionId) merged.set(it.collectionId, it);
+  });
+  return Array.from(merged.values()).filter(it => !isJunkText(`${it.collectionName} ${it.artistName}`));
+}
+
+function scoreAlbum(it, queryNorm, queryWords) {
   const title = normalize(it.collectionName);
   const artist = normalize(it.artistName);
   const combined = `${title} ${artist}`;
   let score = 0;
-
-  // coincidencia de frase completa: la señal más fuerte
   if (queryNorm && combined.includes(queryNorm)) score += 60;
   if (queryNorm && title === queryNorm) score += 40;
-
   queryWords.forEach(w => {
     if (w.length < 2) return;
     if (title.includes(w)) score += 3;
-    if (artist.includes(w)) score += 5; // que coincida el artista pesa más
+    if (artist.includes(w)) score += 5;
   });
-
-  // qué proporción de las palabras del artista real están en la búsqueda
-  const artistWords = artist.split(' ').filter(Boolean);
-  if (artistWords.length) {
-    const hits = artistWords.filter(w => queryWords.includes(w)).length;
-    score += (hits / artistWords.length) * 15;
-  }
-
-  // discos con más pistas suelen ser el álbum de estudio real
   score += Math.min(it.trackCount || 0, 20) * 0.15;
-
-  // penaliza nombres de "sello" genéricos típicos de karaoke/covers
-  if (/players|all[- ]?stars|studio (band|singers|musicians)/.test(artist)) score -= 25;
-
   return score;
-}
-
-async function fetchAlbums(term, attribute) {
-  const attr = attribute ? `&attribute=${attribute}` : '';
-  const url = `https://itunes.apple.com/search?term=${encodeURIComponent(term)}&entity=album&country=US&limit=50${attr}`;
-  const res = await fetch(url);
-  const json = await res.json();
-  return json.results || [];
 }
 
 async function runSearch() {
@@ -148,25 +182,29 @@ async function runSearch() {
   if (!term) return;
   const list = document.getElementById('results-list');
   list.innerHTML = `<div class="empty-state">Buscando…</div>`;
+
   try {
-    // dos pasadas: búsqueda general + búsqueda enfocada en el título del álbum,
-    // así el disco real aparece aunque el término mezcle artista y álbum
-    const [broad, byTitle] = await Promise.all([
-      fetchAlbums(term, null),
-      fetchAlbums(term, 'albumTerm')
-    ]);
-
-    const merged = new Map();
-    [...broad, ...byTitle].forEach(it => {
-      if (it.collectionId) merged.set(it.collectionId, it);
-    });
-
     const queryNorm = normalize(term);
     const queryWords = queryNorm.split(' ').filter(Boolean);
 
-    const results = Array.from(merged.values())
-      .filter(it => !isJunkResult(it))
-      .sort((a, b) => scoreResult(b, queryNorm, queryWords) - scoreResult(a, queryNorm, queryWords))
+    let candidateAlbums = [];
+    const artists = await findArtistCandidates(term);
+
+    if (artists.length) {
+      // discografía oficial real de los artistas que coinciden — sin karaoke, sin ruido
+      const lists = await Promise.all(artists.map(a => albumsForArtist(a.artistId)));
+      const merged = new Map();
+      lists.flat().forEach(it => { if (it.collectionId) merged.set(it.collectionId, it); });
+      candidateAlbums = Array.from(merged.values());
+    }
+
+    if (!candidateAlbums.length) {
+      // no se identificó un artista real con confianza: buscamos por texto con filtros
+      candidateAlbums = await fallbackTextSearch(term);
+    }
+
+    const results = candidateAlbums
+      .sort((a, b) => scoreAlbum(b, queryNorm, queryWords) - scoreAlbum(a, queryNorm, queryWords))
       .slice(0, 12);
 
     renderResults(results);
