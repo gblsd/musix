@@ -79,15 +79,48 @@ document.getElementById('search-input').addEventListener('keydown', e => {
   if (e.key === 'Enter') runSearch();
 });
 
+// palabras que delatan discos "tributo"/karaoke que no son el álbum real
+const JUNK_PATTERNS = [
+  'karaoke', 'tribute', 'made famous', 'originally performed',
+  'in the style of', 'as made famous', 'cover version', 'this is a tribute',
+  'a tribute to', 'performed by'
+];
+
+function isJunkResult(it) {
+  const text = `${it.collectionName || ''} ${it.artistName || ''}`.toLowerCase();
+  return JUNK_PATTERNS.some(p => text.includes(p));
+}
+
+function scoreResult(it, queryWords) {
+  const title = (it.collectionName || '').toLowerCase();
+  const artist = (it.artistName || '').toLowerCase();
+  let score = 0;
+  queryWords.forEach(w => {
+    if (title.includes(w)) score += 2;
+    if (artist.includes(w)) score += 3; // coincidir el artista pesa más
+  });
+  // discos con más canciones suelen ser el álbum de estudio real,
+  // no un single o EP suelto con el mismo nombre
+  score += Math.min(it.trackCount || 0, 20) * 0.1;
+  return score;
+}
+
 async function runSearch() {
   const term = document.getElementById('search-input').value.trim();
   if (!term) return;
   const list = document.getElementById('results-list');
   list.innerHTML = `<div class="empty-state">Buscando…</div>`;
   try {
-    const res = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(term)}&entity=album&limit=15`);
+    const res = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(term)}&entity=album&limit=25`);
     const json = await res.json();
-    renderResults(json.results || []);
+    const queryWords = term.toLowerCase().split(/\s+/).filter(Boolean);
+
+    const results = (json.results || [])
+      .filter(it => !isJunkResult(it))
+      .sort((a, b) => scoreResult(b, queryWords) - scoreResult(a, queryWords))
+      .slice(0, 12);
+
+    renderResults(results);
   } catch (err) {
     list.innerHTML = `<div class="empty-state">Error al buscar. Revisá tu conexión.</div>`;
   }
