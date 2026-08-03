@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bitácora Sonora</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- filtro SVG para el efecto de tinta rugosa del sello -->
+<svg width="0" height="0" style="position:absolute">
+  <filter id="inkRough">
+    <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" result="noise" seed="7"/>
+    <feDisplacementMap in="SourceGraphic" in2="noise" scale="2.4"/>
+  </filter>
+</svg>
+
+<header class="site">
+  <div class="site-inner">
+    <h1 class="wordmark" id="wordmark">Bitácora Sonora<small id="wordmark-sub">DIARIO DE ESCUCHA</small></h1>
+    <nav class="site-nav">
+      <button data-view="shelf" class="active">Estante</button>
+      <button data-view="search">Añadir</button>
+    </nav>
+  </div>
+</header>
+
+<main>
+
+  <!-- ESTANTE: grilla de todo lo calificado -->
+  <section class="view active" id="view-shelf">
+    <h2 class="view-title">Estante <span class="count" id="shelf-count"></span></h2>
+    <div class="shelf-grid" id="shelf-grid"></div>
+    <div class="empty-state" id="shelf-empty" style="display:none">
+      El estante está vacío todavía.<br>Usá "Añadir" para buscar tu primer álbum.
+    </div>
+  </section>
+
+  <!-- BUSCAR: catálogo de iTunes -->
+  <section class="view" id="view-search">
+    <h2 class="view-title">Buscar álbum</h2>
+    <div class="search-bar">
+      <input type="text" id="search-input" placeholder="Nombre del álbum o artista…">
+      <button id="search-btn">Buscar</button>
+    </div>
+    <div class="results-list" id="results-list"></div>
+
+    <!-- panel de calificación, se llena al elegir un resultado -->
+    <div class="rating-panel" id="rating-panel" style="display:none"></div>
+  </section>
+
+  <!-- DETALLE de una entrada guardada -->
+  <section class="view" id="view-entry">
+    <div class="entry-detail" id="entry-detail"></div>
+  </section>
+
+</main>
+
+<button class="login-fab" id="login-fab">Editor</button>
+
+<div class="modal-backdrop" id="login-modal">
+  <div class="modal-box">
+    <h3 id="login-title">Acceso de editor</h3>
+    <input type="email" id="login-email" placeholder="correo">
+    <input type="password" id="login-pass" placeholder="contraseña">
+    <div class="modal-msg" id="login-msg"></div>
+    <button class="btn-primary" id="login-submit">Entrar</button>
+    <button class="btn-secondary" id="login-cancel">Cerrar</button>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
